@@ -1,5 +1,4 @@
 import pika
-import json
 
 from django.core.management.base import BaseCommand
 from django.conf import settings
@@ -46,7 +45,7 @@ class Command(BaseCommand):
             print u"- Queue: " + self.queue + u" -"
             print u"- Callback: " + str(self.callback) + u" -"
             
-    def task_do(self,channel, method_frame, header_frame, body):
+    def task_do(self,channel, method, header_frame, body):
         if self.debug:
             print u"New task" + body
         try:
@@ -54,7 +53,10 @@ class Command(BaseCommand):
         except Exception, e:
             if self.debug:
                 print u"ERROR on callback function: " + str(e)
-            
+            return 1
+        channel.basic_ack(delivery_tag=method.delivery_tag)
+        return 1
+    
     def monitor(self):
         credentials = pika.PlainCredentials(self.user_name, self.user_pass)
         parameters = pika.ConnectionParameters(host=self.host, virtual_host=self.virtual_host,
@@ -62,10 +64,7 @@ class Command(BaseCommand):
         connection = pika.BlockingConnection(parameters)
         channel = connection.channel()
         channel.queue_declare(queue=self.queue)
-        if self.debug:
-            channel.basic_consume(self.task_do, queue=self.queue, no_ack=True)
-        else:
-            channel.basic_consume(self.task_do, queue=self.queue)
+        channel.basic_consume(self.task_do, queue=self.queue)
         if self.debug:
             print u"Start consuming queue..."
         channel.start_consuming()
