@@ -19,6 +19,7 @@ setup(name='djamqpconsumer',
       zip_safe=False,
       install_requires=[
           # -*- Extra requirements: -*-
+          'pika',
       ],
       entry_points="""
       # -*- Entry points: -*-
