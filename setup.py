@@ -1,13 +1,12 @@
 from setuptools import setup, find_packages
-import sys, os
 
 version = '0.5'
 
 setup(name='djamqpconsumer',
       version=version,
       description="Blocking custom django command to consume a AMQP queue",
-      long_description="""\
-""",
+      long_description=open("README.rst").read() + "\n" +
+                       open("HISTORY.txt").read(),
       classifiers=[], # Get strings from http://pypi.python.org/pypi?%3Aaction=list_classifiers
       keywords='django amql pika',
       author='Aitzol Naberan',
