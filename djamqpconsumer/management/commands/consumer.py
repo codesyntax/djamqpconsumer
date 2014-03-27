@@ -4,6 +4,7 @@ from django.core.management.base import BaseCommand
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 
+import logging
 
 class Command(BaseCommand):
     args = "debug"
@@ -16,6 +17,7 @@ class Command(BaseCommand):
     user_name = None
     user_pass = None
     queue = None
+    log = logging.getLogger(__name__)
     
     def setup(self, *args, **kwargs):
         if 'debug' in args:
@@ -36,25 +38,31 @@ class Command(BaseCommand):
             self.callback = getattr(module, parts[-1])
             if not(callable(self.callback)):
                    raise ImproperlyConfigured
-        if self.debug:
-            print u"------ Consumer setup ------"
-            print u"- Host: " + self.host + u" -"
-            print u"- VH: " + self.virtual_host + u" -"
-            print u"- Username: " + self.user_name + u" -"
-            print u"- Password: " + self.user_pass + u" -"
-            print u"- Queue: " + self.queue + u" -"
-            print u"- Callback: " + str(self.callback) + u" -"
+        self.log.info(u"------ Consumer setup ------")
+        self.log.info(u"- Host: " + self.host + u" -")
+        self.log.info(u"- VH: " + self.virtual_host + u" -")
+        self.log.info(u"- Username: " + self.user_name + u" -")
+        self.log.info(u"- Password: " + self.user_pass + u" -")
+        self.log.info(u"- Queue: " + self.queue + u" -")
+        self.log.info(u"- Callback: " + str(self.callback) + u" -")
             
     def task_do(self,channel, method, header_frame, body):
+        result = {}
         if self.debug:
-            print u"New task" + body
+            self.log.info(u"New task" + body)
         try:
-            self.callback(header_frame, body)
+            result = self.callback(header_frame, body)
         except Exception, e:
+            self.log.error(u"ERROR on callback function: " + str(e))
+        status = result.get('result', 0)
+        msg = result.get('msg', '')
+        retry = result.get('retry', True)
+        if status == 1:
+            channel.basic_ack(delivery_tag=method.delivery_tag)
+        else:
             if self.debug:
-                print u"ERROR on callback function: " + str(e)
-            return 1
-        channel.basic_ack(delivery_tag=method.delivery_tag)
+                self.log.info('Retrying task. Reason: %s, task: %s, requeue: %s' % (msg, body, str(retry)))            
+            channel.basic_nack(delivery_tag=method.delivery_tag, requeue=retry)
         return 1
     
     def monitor(self):
@@ -66,7 +74,7 @@ class Command(BaseCommand):
         channel.queue_declare(queue=self.queue)
         channel.basic_consume(self.task_do, queue=self.queue)
         if self.debug:
-            print u"Start consuming queue..."
+            self.log.info(u"Start consuming queue...")
         channel.start_consuming()
         
     def handle(self, *args, **options):
