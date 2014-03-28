@@ -1,3 +1,9 @@
+0.7 (2014-XX-YY)
+===============
+
+- Better handle closing connections
+- Add delayed_queue for retry
+
 0.6 (2014-03-27)
 ================
 - Parse results to send nack/requeue commands

@@ -9,6 +9,7 @@ import logging
 class Command(BaseCommand):
     args = "debug"
     help = 'AMQP consumer'
+    log = logging.getLogger(__name__)
     
     debug = False
     callback = None
@@ -17,8 +18,9 @@ class Command(BaseCommand):
     user_name = None
     user_pass = None
     queue = None
-    log = logging.getLogger(__name__)
-    
+    delayed_channel = None
+    delay = 20000
+    expire = 60000
     def setup(self, *args, **kwargs):
         if 'debug' in args:
             self.debug = True
@@ -38,6 +40,8 @@ class Command(BaseCommand):
             self.callback = getattr(module, parts[-1])
             if not(callable(self.callback)):
                    raise ImproperlyConfigured
+        self.ttl = getattr(settings, 'DJCONSUMER_TTL', 20000)
+        self.expire = getattr(settings, 'DJCONSUMER_EXPIRE', 60000)
         self.log.info(u"------ Consumer setup ------")
         self.log.info(u"- Host: " + self.host + u" -")
         self.log.info(u"- VH: " + self.virtual_host + u" -")
@@ -54,29 +58,45 @@ class Command(BaseCommand):
             result = self.callback(header_frame, body)
         except Exception, e:
             self.log.error(u"ERROR on callback function: " + str(e))
-        status = result.get('result', 0)
+
         msg = result.get('msg', '')
-        retry = result.get('retry', True)
-        if status == 1:
-            channel.basic_ack(delivery_tag=method.delivery_tag)
-        else:
+        retry = result.get('retry', False)
+        if retry:
             if self.debug:
-                self.log.info('Retrying task. Reason: %s, task: %s, requeue: %s' % (msg, body, str(retry)))            
-            channel.basic_nack(delivery_tag=method.delivery_tag, requeue=retry)
+                self.log.info('Retrying task. Reason: %s, task: %s, requeue: %s' % (msg, body, str(retry)))
+            if header_frame.expiration > 0:
+                self.delayed_channel.basic_publish(exchange='',
+                                               routing_key=self.queue + '_delayed',
+                                               body=body)
+        channel.basic_ack(delivery_tag=method.delivery_tag)
         return 1
     
-    def monitor(self):
+
+    def handle(self, *args, **options):
+        self.setup(*args)
         credentials = pika.PlainCredentials(self.user_name, self.user_pass)
         parameters = pika.ConnectionParameters(host=self.host, virtual_host=self.virtual_host,
                                                credentials=credentials)
         connection = pika.BlockingConnection(parameters)
+        delayed_connection = pika.BlockingConnection(parameters)
         channel = connection.channel()
         channel.queue_declare(queue=self.queue)
+        channel.queue_bind(exchange='amq.direct',
+                           queue=self.queue)
+        self.delayed_channel = delayed_connection.channel()
+        self.delayed_channel.queue_declare(queue=self.queue + '_delayed', arguments={
+            'x-message-ttl' : self.ttl, 
+            'x-dead-letter-exchange' : 'amq.direct', 
+            'x-dead-letter-routing-key' : self.queue,
+            })
         channel.basic_consume(self.task_do, queue=self.queue)
         if self.debug:
             self.log.info(u"Start consuming queue...")
-        channel.start_consuming()
+        try:
+            channel.start_consuming()
+        except KeyboardInterrupt:
+            self.log.info(u"Stop consuming and close connections")
+            channel.stop_consuming()
+        connection.close()
+        delayed_connection.close()
         
-    def handle(self, *args, **options):
-        self.setup(*args)
-        self.monitor()
