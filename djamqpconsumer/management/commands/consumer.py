@@ -20,7 +20,7 @@ class Command(BaseCommand):
     queue = None
     delayed_channel = None
     delay = 20000
-    expire = 60000
+
     def setup(self, *args, **kwargs):
         if 'debug' in args:
             self.debug = True
@@ -41,7 +41,7 @@ class Command(BaseCommand):
             if not(callable(self.callback)):
                    raise ImproperlyConfigured
         self.ttl = getattr(settings, 'DJCONSUMER_TTL', 20000)
-        self.expire = getattr(settings, 'DJCONSUMER_EXPIRE', 60000)
+
         self.log.info(u"------ Consumer setup ------")
         self.log.info(u"- Host: " + self.host + u" -")
         self.log.info(u"- VH: " + self.virtual_host + u" -")
@@ -56,9 +56,12 @@ class Command(BaseCommand):
             self.log.info(u"New task" + body)
         try:
             result = self.callback(header_frame, body)
+            if type(result) != type({}):
+                result = {}
         except Exception, e:
             self.log.error(u"ERROR on callback function: " + str(e))
-
+            channel.basic_reject(delivery_tag=method.delivery_tag, requeue=False)
+            return 1
         msg = result.get('msg', '')
         retry = result.get('retry', False)
         if retry:

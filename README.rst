@@ -32,6 +32,18 @@ Which queue listen to
 ``CONSUMER_CALLBACK``
 
 Path to the callback func. ex.: djamqpconsumer.printconsumer.printdata
+Function's return value must be a dict with this format::
+
+  {'result': 0/1,
+   'msg': 'String for debug purpouse',
+   'retry': True/Fals #Task will be requeued if this is True and task.expiration > 0
+  }
+
+``DJCONSUMER_TTL``
+
+TTL for de delayed queue in miliseconds (default 20000). 
+Task will be requeued to a delayed queue if its expiration time is not over and the callback function set the
+retry flag
 
 Install
 -------
