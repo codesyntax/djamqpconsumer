@@ -92,7 +92,7 @@ class Command(BaseCommand):
             'x-dead-letter-exchange' : 'amq.direct', 
             'x-dead-letter-routing-key' : self.queue,
             })
-        channel.basic_consume(self.task_do, queue=self.queue)
+        channel.basic_consume(self.queue, self.task_do)
         if self.debug:
             self.log.info(u"Start consuming queue...")
         try:
