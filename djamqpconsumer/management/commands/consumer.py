@@ -58,7 +58,7 @@ class Command(BaseCommand):
             result = self.callback(header_frame, body)
             if type(result) != type({}):
                 result = {}
-        except Exception, e:
+        except Exception as e:
             self.log.error(u"ERROR on callback function: " + str(e))
             channel.basic_reject(delivery_tag=method.delivery_tag, requeue=False)
             return 1
